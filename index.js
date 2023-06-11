@@ -229,60 +229,6 @@ addPeers()
 
 
 
-// const json = {
-//   "123": {
-//     uuid: "98910d0f-d078-4cff-a700-a66106e5699f",
-//     configs: {
-//       "3dbc0c93-34ec-4a3f-9d36-0465b828c3e3": {
-//         name: "yaxxei"
-//       },
-//       "3db34c93-34ec-4a3f-9d36-0465b84yc3e3": {
-//         name: "razil"
-//       }
-//     }
-//   },
-//   "456": {
-//     uuid: "98456d0f-d078-4cff-a457-a66106e5699f",
-//     configs: {
-//       "290be9de-ea58-461e-956a-a7afc66e9e22": {
-//         name: "ainur"
-//       },
-//       "8158677d-572e-49fc-80f2-a0d559de6cfe": {
-//         name: "kirill"
-//       }
-//     }
-//   }
-// }
-
-// const addConfig = {
-//   [uuidv4()]: {
-//     name: 'bedwarser'
-//   }
-// }
-
-// json['123'].configs = Object.assign(json['123'].configs, addConfig)
-
-// if (json['123']) {
-//   let configsKeys = Object.keys(json['123'].configs)
-//   let configName
-
-//   for (let i = 0; i < configsKeys.length; i++) {
-//     let currentConfig = json['123'].configs[configsKeys[i]]
-//     if (currentConfig.name === 'yaxxei') {
-//       configName = currentConfig.name;
-
-//       console.log(currentConfig.name);
-//       break
-//     }
-//   }
-//   if (!configName) {
-//     console.log('Вы не создавали конфиг с таким именем');
-//   }
-// }
-
-
-
-
 
 
 bot.onText(/start/, msg => {
