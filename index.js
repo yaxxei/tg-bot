@@ -13,8 +13,20 @@ console.log('Bot has been started');
 const filePath = path.join(__dirname, '/configs', '/wg0.conf')
 
 const userConfigMapFilePath = path.join(__dirname, '/configs', 'userConfigMap.json');
+// {
+//   "825598241": {
+//     "uuid": "98910d0f-d078-4cff-a700-a66106e5699f",
+//     "configs": {
+//       "3dbc0c93-34ec-4a3f-9d36-0465b828c3e3": {
+//         "name": "yaxxel"
+//       }
+//     }
+//   }
+// }
 
-// let userConfigMap = {};
+if (!fs.existsSync(userConfigMapFilePath)) {
+  fs.writeFileSync(userConfigMapFilePath, JSON.stringify({}));
+}
 
 const jsonUsersConfigs = './configs/userConfigMap.json'
 const jsonUsersConfigsData = fs.readFileSync(jsonUsersConfigs, 'utf-8');
@@ -98,7 +110,7 @@ const addPeers = async () => {
           await bot.sendMessage(chatId, `Название вашего VPN: ${msg.text}`);
           await bot.sendMessage(chatId, 'Введите команду /getconfig (имя_конфига) не ранее, чем через 5 секунд после создания конфига');
 
-          const userUuid = uuidv4()
+          const configUuid = uuidv4()
 
           try {
             fs.mkdirSync(path.join(__dirname, 'configs', 'peer-keys', msg.text), { recursive: true });
@@ -128,7 +140,7 @@ const addPeers = async () => {
             const address = newAddress
 
             const linesToAdd = [
-              `# Client: ${msg.text} (${userUuid})\n`,
+              `# Client: ${msg.text} (${configUuid})\n`,
               `[Peer]\n`, 
               `PublicKey = ${publicKey}`,
               `PresharedKey = ${preSharedKey}`,
@@ -179,21 +191,17 @@ const addPeers = async () => {
               enabled: true
             };
 
-            data.clients[userUuid] = client;
+            data.clients[configUuid] = client;
             
             const newData = JSON.stringify(data, null, 2)
             fs.writeFileSync(jsonConfig, newData);
             
-            const jsonUsersConfigs = './configs/userConfigMap.json'
-            const jsonUsersConfigsData = fs.readFileSync(jsonUsersConfigs, 'utf-8');
-            const usersConfigsData = JSON.parse(jsonUsersConfigsData);
-
             const userConfigId = uuidv4()
 
             function addUserConfigById(chatId, uuid, name) {
               if (!usersConfigsData.hasOwnProperty(chatId)) {
                 usersConfigsData[chatId] = {
-                  uuid: userUuid,
+                  uuid: userConfigId,
                   configs: {
                     [uuid]: {
                       name
@@ -213,7 +221,7 @@ const addPeers = async () => {
                 fs.writeFileSync(jsonUsersConfigs, JSON.stringify(usersConfigsData, null, 2))
               }
             }
-            addUserConfigById(chatId, userConfigId, msg.text);
+            addUserConfigById(chatId, configUuid, msg.text);
 
           }, 2000)
 
