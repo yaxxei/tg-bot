@@ -13,16 +13,6 @@ console.log('Bot has been started');
 const filePath = path.join(__dirname, '/configs', '/wg0.conf')
 
 const userConfigMapFilePath = path.join(__dirname, '/configs', 'userConfigMap.json');
-// {
-//   "825598241": {
-//     "uuid": "98910d0f-d078-4cff-a700-a66106e5699f",
-//     "configs": {
-//       "3dbc0c93-34ec-4a3f-9d36-0465b828c3e3": {
-//         "name": "yaxxel"
-//       }
-//     }
-//   }
-// }
 
 if (!fs.existsSync(userConfigMapFilePath)) {
   fs.writeFileSync(userConfigMapFilePath, JSON.stringify({}));
@@ -34,10 +24,127 @@ const usersConfigsData = JSON.parse(jsonUsersConfigsData);
 
 const addPeers = async () => {
   try {
-    bot.onText(/\/newconfig/, async (msg, match) => {
+    bot.onText(/\/newconfig (.+)/, async (msg, match) => {
       const chatId = msg.chat.id
-      await bot.sendMessage(chatId, 'Введите название для вашего VPN');
-      step[`${chatId}`] = 'name';
+      const name = match[1]
+
+      await bot.sendMessage(chatId, `Название вашего VPN: ${name}`);
+      await bot.sendMessage(chatId, 'Введите команду /getconfig (имя_конфига) не ранее, чем через 5 секунд после создания конфига');
+
+      const configUuid = uuidv4()
+
+      try {
+        fs.mkdirSync(path.join(__dirname, 'configs', 'peer-keys', name), { recursive: true });
+        fs.mkdirSync(path.join(__dirname, 'configs', 'peer-configs', chatId.toString()), { recursive: true });
+      } catch (err) {
+        console.error(err);
+      }
+      const folderPath = path.join(__dirname, 'configs', 'peer-keys', name);
+
+      const filePathPrivateKey = path.join(folderPath, `${name}-private-key`)
+      const filePathPublicKey = path.join(folderPath, `${name}-public-key`)
+      const filePathPreSharedKey = path.join(folderPath, `${name}-preshared-key`)
+
+      const command = `wg genkey > ${filePathPrivateKey} && wg pubkey < ${filePathPrivateKey} > ${filePathPublicKey} && wg genpsk > ${filePathPreSharedKey}`
+
+      cp.exec(command, (error, stdout, stderr) => {
+        if (error) {
+          console.log('Error: ', error);
+        }
+      })
+
+      setTimeout(async () => {
+        const privateKey = fs.readFileSync(filePathPrivateKey, 'utf8')
+        const publicKey = fs.readFileSync(filePathPublicKey, 'utf8')
+        const preSharedKey = fs.readFileSync(filePathPreSharedKey, 'utf8')
+
+        const address = newAddress
+
+        const linesToAdd = [
+          `# Client: ${name} (${configUuid})\n`,
+          `[Peer]\n`,
+          `PublicKey = ${publicKey}`,
+          `PresharedKey = ${preSharedKey}`,
+          `AllowedIPs = ${address}/32`,
+          '\n',
+          '\n',
+        ]
+
+        for (let line of linesToAdd) {
+          fs.appendFileSync(filePath, line)
+        }
+
+        const linesToAddToConfig = [
+          `[Interface]\n`,
+          `PrivateKey = ${privateKey}`,
+          `Address = ${address}/24\n`,
+          'DNS = 1.1.1.1\n',
+          '\n',
+          '[Peer]\n',
+          `PublicKey = ${publicKey}`,
+          `PresharedKey = ${preSharedKey}`,
+          `AllowedIPs = 0.0.0.0/0, ::/0\n`,
+          'PersistentKeepalive = 0\n',
+          'Endpoint = 95.140.153.56:51820'
+        ]
+
+        const configFolderPath = path.join(__dirname, 'configs', 'peer-configs', chatId.toString())
+
+        for (let line of linesToAddToConfig) {
+          fs.appendFileSync(path.join(configFolderPath, `${name}.conf`), line)
+        }
+
+        const jsonConfig = './configs/wg0.json'
+        const jsonData = fs.readFileSync(jsonConfig, 'utf-8');
+        const data = JSON.parse(jsonData);
+
+        const peerDate = new Date()
+        const isoDate = peerDate.toISOString();
+
+        const client = {
+          name: name,
+          address,
+          privateKey: privateKey.trim(),
+          publicKey: publicKey.trim(),
+          preSharedKey: preSharedKey.trim(),
+          createdAt: isoDate,
+          updatedAt: isoDate,
+          enabled: true
+        };
+
+        data.clients[configUuid] = client;
+
+        const newData = JSON.stringify(data, null, 2)
+        fs.writeFileSync(jsonConfig, newData);
+
+        const userConfigId = uuidv4()
+
+        function addUserConfigById(chatId, uuid, name) {
+          if (!usersConfigsData.hasOwnProperty(chatId)) {
+            usersConfigsData[chatId] = {
+              uuid: userConfigId,
+              configs: {
+                [uuid]: {
+                  name
+                }
+              }
+            }
+
+            fs.writeFileSync(jsonUsersConfigs, JSON.stringify(usersConfigsData, null, 2))
+          } else {
+            const configs = {
+              [uuid]: {
+                name
+              }
+            }
+
+            usersConfigsData[chatId.toString()].configs = Object.assign(usersConfigsData[chatId.toString()].configs, configs)
+            fs.writeFileSync(jsonUsersConfigs, JSON.stringify(usersConfigsData, null, 2))
+          }
+        }
+        addUserConfigById(chatId, configUuid, name);
+
+      }, 2000)
     })
 
     bot.onText(/getconfig (.+)/, async (msg, match) => {
@@ -102,228 +209,18 @@ const addPeers = async () => {
     const newAddressArr = addressArr.slice(0, lastElement).concat(newLastElement)
     const newAddress = newAddressArr.join('.')
 
-    bot.on('message', async (msg) => {
-      const chatId = msg.chat.id;
-
-      if (msg.text && msg.text.length > 0) {
-        if (step[chatId] === 'name') {
-          await bot.sendMessage(chatId, `Название вашего VPN: ${msg.text}`);
-          await bot.sendMessage(chatId, 'Введите команду /getconfig (имя_конфига) не ранее, чем через 5 секунд после создания конфига');
-
-          const configUuid = uuidv4()
-
-          try {
-            fs.mkdirSync(path.join(__dirname, 'configs', 'peer-keys', msg.text), { recursive: true });
-            fs.mkdirSync(path.join(__dirname, 'configs', 'peer-configs', chatId.toString()), { recursive: true });
-          } catch (err) {
-            console.error(err);
-          }
-          const folderPath = path.join(__dirname, 'configs', 'peer-keys', msg.text);
-          
-          const filePathPrivateKey = path.join(folderPath, `${msg.text}-private-key`)
-          const filePathPublicKey = path.join(folderPath, `${msg.text}-public-key`)
-          const filePathPreSharedKey = path.join(folderPath, `${msg.text}-preshared-key`)
-
-          const command = `wg genkey > ${filePathPrivateKey} && wg pubkey < ${filePathPrivateKey} > ${filePathPublicKey} && wg genpsk > ${filePathPreSharedKey}`
-
-          cp.exec(command, (error, stdout, stderr) => {
-            if (error) {
-              console.log('Error: ', error);
-            }
-          })
-
-          setTimeout(async () => {
-            const privateKey = fs.readFileSync(filePathPrivateKey, 'utf8')
-            const publicKey = fs.readFileSync(filePathPublicKey, 'utf8')
-            const preSharedKey = fs.readFileSync(filePathPreSharedKey, 'utf8')
-
-            const address = newAddress
-
-            const linesToAdd = [
-              `# Client: ${msg.text} (${configUuid})\n`,
-              `[Peer]\n`, 
-              `PublicKey = ${publicKey}`,
-              `PresharedKey = ${preSharedKey}`,
-              `AllowedIPs = ${address}/32`,
-              '\n',
-              '\n',
-            ]
-
-            for (let line of linesToAdd) {
-              fs.appendFileSync(filePath, line)
-            }
-
-            const linesToAddToConfig = [
-              `[Interface]\n`, 
-              `PrivateKey = ${privateKey}`,
-              `Address = ${address}/24\n`,
-              'DNS = 1.1.1.1\n',
-              '\n',
-              '[Peer]\n',
-              `PublicKey = ${publicKey}`,
-              `PresharedKey = ${preSharedKey}`,
-              `AllowedIPs = 0.0.0.0/0, ::/0\n`,
-              'PersistentKeepalive = 0\n',
-              'Endpoint = 95.140.153.56:51820'
-            ]
-
-            const configFolderPath = path.join(__dirname, 'configs', 'peer-configs', chatId.toString())
-
-            for (let line of linesToAddToConfig) {
-              fs.appendFileSync(path.join(configFolderPath, `${msg.text}.conf`), line)
-            }
-
-            const jsonConfig = './configs/wg0.json'
-            const jsonData = fs.readFileSync(jsonConfig, 'utf-8');
-            const data = JSON.parse(jsonData);
-
-            const peerDate = new Date()
-            const isoDate = peerDate.toISOString();
-
-            const client = {
-              name: msg.text,
-              address,
-              privateKey: privateKey.trim(),
-              publicKey: publicKey.trim(),
-              preSharedKey: preSharedKey.trim(),
-              createdAt: isoDate,
-              updatedAt: isoDate,
-              enabled: true
-            };
-
-            data.clients[configUuid] = client;
-            
-            const newData = JSON.stringify(data, null, 2)
-            fs.writeFileSync(jsonConfig, newData);
-            
-            const userConfigId = uuidv4()
-
-            function addUserConfigById(chatId, uuid, name) {
-              if (!usersConfigsData.hasOwnProperty(chatId)) {
-                usersConfigsData[chatId] = {
-                  uuid: userConfigId,
-                  configs: {
-                    [uuid]: {
-                      name
-                    }
-                  }
-                }
-
-                fs.writeFileSync(jsonUsersConfigs, JSON.stringify(usersConfigsData, null, 2))
-              } else {
-                const configs = {
-                  [uuid]: {
-                    name             
-                  }
-                }
-
-                usersConfigsData[chatId.toString()].configs = Object.assign(usersConfigsData[chatId.toString()].configs, configs)
-                fs.writeFileSync(jsonUsersConfigs, JSON.stringify(usersConfigsData, null, 2))
-              }
-            }
-            addUserConfigById(chatId, configUuid, msg.text);
-
-          }, 2000)
-
-          step[`${chatId}`] = null;
-        }
-      }
-    })
   } catch (error) {
     console.log('Ошибка: ', error);
   }
 }
 addPeers()
 
-
-
-
-
 bot.onText(/start/, msg => {
   const chatId = msg.chat.id
 
   bot.sendMessage(chatId, 'Привет, хочешь начать пользоваться VPN?\nВот список комманд:')
   bot.sendMessage(chatId, `/help — вывести список всех комманд
-/newconfig — cоздать новый конфиг
-/getconfig (имя созданного конфига) — скинуть имеющиеся конфиги
+/newconfig (имя_конфига) — cоздать новый конфиг
+/getconfig (имя_конфига) — скинуть имеющийся конфиги
 /support — написать в поддержку`)
 })
-
-// bot.onText(/getconfig/, async msg => {
-//   const chatId = msg.chat.id
-  
-//   const configPath = path.join(__dirname, '/configs', '/peer-configs', `${configName}.conf`)
-
-//   await bot.sendDocument(chatId, configPath)
-//     .then(async () => {
-//       await bot.sendMessage(chatId, 'Приятного пользоавния')
-//     })
-//     .catch(err => {
-//       console.log('Ошибка при отправке конфига' + err);
-//     })
-// })
-
-// bot.onText(/config/, async msg => {
-//   const chatId = msg.chat.id
-
-//   await bot.sendDocument(chatId, './configs/wg0.conf')
-//     .then(async () => {
-//       await bot.sendMessage(chatId, 'Документ отправлен')
-//     })
-//     .catch(err => {
-//       console.log(err);
-//     })
-// })
-
-// bot.onText(/\/start/, msg => {
-//   const chatId = msg.chat.id
-
-//   bot.sendMessage(chatId, 'Выберите длительность подписки', {
-//     reply_markup: {
-//       keyboard: [
-//         [{ text: '1 месяц - 100 рубелй' }],
-//         [{ text: '3 месяца - 250 рубелй' }],
-//         [{ text: '1 год - 1000 рубелй' }]
-//       ]
-//     }
-//   })
-// })
-
-// bot.on('message', msg => {
-//   const chatId = msg.chat.id
-//   const text = msg.text
-
-//   if (text === '1 месяц - 100 рубелй') {
-//     bot.sendMessage(chatId, 'Вы выбрали подписку на 1 месяц за 100 рублей. Оплатить подписку можно переводом на QIWI: *номер*', {
-//       reply_markup: {
-//         keyboard: [
-//           [{ text: 'Готово' }]
-//         ]
-//       }
-//     })
-//   }
-
-//   if (text === '3 месяца - 250 рубелй') {
-//     bot.sendMessage(chatId, 'Вы выбрали подписку на 3 месяца за 250 рублей. Оплатить подписку можно переводом на QIWI: *номер*', {
-//       reply_markup: {
-//         keyboard: [
-//           [{ text: 'Готово' }]
-//         ]
-//       }
-//     })
-//   }
-
-//   if (text === '1 год - 1000 рубелй') {
-//     bot.sendMessage(chatId, 'Вы выбрали подписку на 1 год за 1000 рублей. Оплатить подписку можно переводом на QIWI: *номер*', {
-//       reply_markup: {
-//         keyboard: [
-//           [{ text: 'Готово' }]
-//         ]
-//       }
-//     })
-//   }
-
-//   if (text === 'Готово') {
-//     bot.forwardMessage(chatId, '@yaxxei', msg.message_id)
-//   }
-// })
