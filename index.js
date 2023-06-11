@@ -177,8 +177,6 @@ const addPeers = async () => {
       }
     });
 
-    let step = {}
-
     const jsonConfig = './configs/wg0.json'
     const jsonData = fs.readFileSync(jsonConfig, 'utf-8');
     const data = JSON.parse(jsonData);
