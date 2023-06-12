@@ -4,13 +4,23 @@ const fs = require('fs')
 const cp = require('child_process')
 const path = require('path');
 const { v4: uuidv4 } = require('uuid')
+const moment = require('moment')
 
 const TelegramBot = require('node-telegram-bot-api')
 const token = process.env.BOT_TOKEN
 const bot = new TelegramBot(token, { polling: true })
 console.log('Bot has been started');
 
-const filePath = path.join(__dirname, '/configs', '/wg0.conf')
+// const filePath = path.join(__dirname, '/configs', '/wg0.conf')
+const filePath = '../.wg-easy/wg0.conf'
+
+try {
+  fs.mkdirSync(path.join(__dirname, 'configs'), { recursive: true });
+  fs.mkdirSync(path.join(__dirname, 'configs', 'peer-keys'), { recursive: true });
+  fs.mkdirSync(path.join(__dirname, 'configs', 'peer-configs'), { recursive: true });
+} catch (err) {
+  console.error(err);
+}
 
 const userConfigMapFilePath = path.join(__dirname, '/configs', 'userConfigMap.json');
 
@@ -94,7 +104,7 @@ const addPeers = async () => {
           fs.appendFileSync(path.join(configFolderPath, `${name}.conf`), line)
         }
 
-        const jsonConfig = './configs/wg0.json'
+        const jsonConfig = '../.wg-easy/wg0.json'
         const jsonData = fs.readFileSync(jsonConfig, 'utf-8');
         const data = JSON.parse(jsonData);
 
@@ -125,7 +135,8 @@ const addPeers = async () => {
               uuid: userConfigId,
               configs: {
                 [uuid]: {
-                  name
+                  name,
+                  date: isoDate
                 }
               }
             }
@@ -134,7 +145,8 @@ const addPeers = async () => {
           } else {
             const configs = {
               [uuid]: {
-                name
+                name,
+                date: isoDate
               }
             }
 
@@ -177,7 +189,7 @@ const addPeers = async () => {
       }
     });
 
-    const jsonConfig = './configs/wg0.json'
+    const jsonConfig = '../.wg-easy/wg0.json'
     const jsonData = fs.readFileSync(jsonConfig, 'utf-8');
     const data = JSON.parse(jsonData);
     const clients = data.clients
@@ -217,8 +229,41 @@ bot.onText(/start/, msg => {
   const chatId = msg.chat.id
 
   bot.sendMessage(chatId, 'Привет, хочешь начать пользоваться VPN?\nВот список комманд:')
-  bot.sendMessage(chatId, `/help — вывести список всех комманд
+  bot.sendMessage(chatId, `/help — пошаговая помощь
 /newconfig (имя_конфига) — cоздать новый конфиг
-/getconfig (имя_конфига) — скинуть имеющийся конфиги
+/getconfig (имя_конфига) — скинуть конфиг
 /support — написать в поддержку`)
+})
+
+bot.onText(/help/, msg => {
+  const chatId = msg.chat.id
+
+  bot.sendMessage(chatId, `
+Первым делом вам нужно будет создать конфиг, для этого пропишите команду /newconfig (имя_конфига)
+Обратите внимание, что если имя конфига состоит из нескольких слов, то их нужно разделить нижним подчеркиванием.
+  
+После того, как вы создали конфиг, вам нужно будет получить файл с расширением .conf, для этого пропишите команду /getconfig (имя_конфига).
+(Имя_конфига) — это имя ранее созданных вами конфигураций. После этого бот отправит вам документ.
+  
+И так, после того, как вы выполнили предыдущие шаги, вам нужно будет установить приложение WireGuard на ваш ПК или телефон.
+
+Добавление конфигурации на ПК:
+1. Запустите приложение,
+2. Нажмите на кнопку (Добавить туннель),
+3. Выберите файл конфигурации, которое вы получили от бота.
+  
+Добавление конфигурации на телефоне:
+1. Запустите приложение,
+2. Нажмите на кнопку (+),
+3. После чего в появившемся окне выберите вариант (Импорт из файла или архива),
+4. Выберите файл конфигурации, которое вы получили от бота.
+
+Если у вас возникли какие-либо проблемы, вы можете обратиться в поддержку командой /support.
+`)
+})
+
+bot.onText(/support/, msg => {
+  const chatId = msg.chat.id
+
+  bot.sendMessage(chatId, 'Для связи с нами напишите о вашей проблеме в @yaxxei')
 })
