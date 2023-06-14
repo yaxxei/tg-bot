@@ -4,14 +4,13 @@ const fs = require('fs')
 const cp = require('child_process')
 const path = require('path');
 const { v4: uuidv4 } = require('uuid')
-const moment = require('moment')
+const pm2 = require('pm2')
 
 const TelegramBot = require('node-telegram-bot-api')
 const token = process.env.BOT_TOKEN
 const bot = new TelegramBot(token, { polling: true })
 console.log('Bot has been started');
 
-// const filePath = path.join(__dirname, '/configs', '/wg0.conf')
 const filePath = '../.wg-easy/wg0.conf'
 
 try {
@@ -63,100 +62,118 @@ const addPeers = async () => {
         }
       })
 
-      setTimeout(async () => {
-        const privateKey = fs.readFileSync(filePathPrivateKey, 'utf8')
-        const publicKey = fs.readFileSync(filePathPublicKey, 'utf8')
-        const preSharedKey = fs.readFileSync(filePathPreSharedKey, 'utf8')
+      new Promise((res, rej) => {
+        setTimeout(async () => {
+          try {
+            const privateKey = fs.readFileSync(filePathPrivateKey, 'utf8')
+            const publicKey = fs.readFileSync(filePathPublicKey, 'utf8')
+            const preSharedKey = fs.readFileSync(filePathPreSharedKey, 'utf8')
 
-        const address = newAddress
+            const address = newAddress
 
-        const linesToAdd = [
-          `# Client: ${name} (${configUuid})\n`,
-          `[Peer]\n`,
-          `PublicKey = ${publicKey}`,
-          `PresharedKey = ${preSharedKey}`,
-          `AllowedIPs = ${address}/32`,
-          '\n',
-          '\n',
-        ]
+            const linesToAdd = [
+              `# Client: ${name} (${configUuid})\n`,
+              `[Peer]\n`,
+              `PublicKey = ${publicKey}`,
+              `PresharedKey = ${preSharedKey}`,
+              `AllowedIPs = ${address}/32`,
+              '\n',
+              '\n',
+            ]
 
-        for (let line of linesToAdd) {
-          fs.appendFileSync(filePath, line)
-        }
+            for (let line of linesToAdd) {
+              fs.appendFileSync(filePath, line)
+            }
 
-        const linesToAddToConfig = [
-          `[Interface]\n`,
-          `PrivateKey = ${privateKey}`,
-          `Address = ${address}/24\n`,
-          'DNS = 1.1.1.1\n',
-          '\n',
-          '[Peer]\n',
-          `PublicKey = ${publicKey}`,
-          `PresharedKey = ${preSharedKey}`,
-          `AllowedIPs = 0.0.0.0/0, ::/0\n`,
-          'PersistentKeepalive = 0\n',
-          'Endpoint = 95.140.153.56:51820'
-        ]
+            const jsonConfig = '../.wg-easy/wg0.json'
+            const jsonData = fs.readFileSync(jsonConfig, 'utf-8');
+            const data = JSON.parse(jsonData);
 
-        const configFolderPath = path.join(__dirname, 'configs', 'peer-configs', chatId.toString())
+            const serverPublicKey = data.server.publicKey
 
-        for (let line of linesToAddToConfig) {
-          fs.appendFileSync(path.join(configFolderPath, `${name}.conf`), line)
-        }
+            const linesToAddToConfig = [
+              `[Interface]\n`,
+              `PrivateKey = ${privateKey}`,
+              `Address = ${address}/24\n`,
+              'DNS = 1.1.1.1\n',
+              '\n',
+              '[Peer]\n',
+              `PublicKey = ${serverPublicKey}\n`,
+              `PresharedKey = ${preSharedKey}`,
+              `AllowedIPs = 0.0.0.0/0, ::/0\n`,
+              'PersistentKeepalive = 0\n',
+              'Endpoint = 95.140.153.56:51820'
+            ]
 
-        const jsonConfig = '../.wg-easy/wg0.json'
-        const jsonData = fs.readFileSync(jsonConfig, 'utf-8');
-        const data = JSON.parse(jsonData);
+            const configFolderPath = path.join(__dirname, 'configs', 'peer-configs', chatId.toString())
 
-        const peerDate = new Date()
-        const isoDate = peerDate.toISOString();
+            for (let line of linesToAddToConfig) {
+              fs.appendFileSync(path.join(configFolderPath, `${name}.conf`), line)
+            }
 
-        const client = {
-          name: name,
-          address,
-          privateKey: privateKey.trim(),
-          publicKey: publicKey.trim(),
-          preSharedKey: preSharedKey.trim(),
-          createdAt: isoDate,
-          updatedAt: isoDate,
-          enabled: true
-        };
+            const peerDate = new Date()
+            const isoDate = peerDate.toISOString();
 
-        data.clients[configUuid] = client;
+            const client = {
+              name: name,
+              address,
+              privateKey: privateKey.trim(),
+              publicKey: publicKey.trim(),
+              preSharedKey: preSharedKey.trim(),
+              createdAt: isoDate,
+              updatedAt: isoDate,
+              enabled: true
+            };
 
-        const newData = JSON.stringify(data, null, 2)
-        fs.writeFileSync(jsonConfig, newData);
+            data.clients[configUuid] = client;
 
-        const userConfigId = uuidv4()
+            const newData = JSON.stringify(data, null, 2)
+            fs.writeFileSync(jsonConfig, newData);
 
-        function addUserConfigById(chatId, uuid, name) {
-          if (!usersConfigsData.hasOwnProperty(chatId)) {
-            usersConfigsData[chatId] = {
-              uuid: userConfigId,
-              configs: {
-                [uuid]: {
-                  name,
-                  date: isoDate
+            const userConfigId = uuidv4()
+
+            function addUserConfigById(chatId, uuid, name) {
+              if (!usersConfigsData.hasOwnProperty(chatId)) {
+                usersConfigsData[chatId] = {
+                  uuid: userConfigId,
+                  configs: {
+                    [uuid]: {
+                      name,
+                      date: isoDate
+                    }
+                  }
                 }
+
+                fs.writeFileSync(jsonUsersConfigs, JSON.stringify(usersConfigsData, null, 2))
+              } else {
+                const configs = {
+                  [uuid]: {
+                    name,
+                    date: isoDate
+                  }
+                }
+
+                usersConfigsData[chatId.toString()].configs = Object.assign(usersConfigsData[chatId.toString()].configs, configs)
+                fs.writeFileSync(jsonUsersConfigs, JSON.stringify(usersConfigsData, null, 2))
               }
             }
+            addUserConfigById(chatId, configUuid, name);
 
-            fs.writeFileSync(jsonUsersConfigs, JSON.stringify(usersConfigsData, null, 2))
-          } else {
-            const configs = {
-              [uuid]: {
-                name,
-                date: isoDate
-              }
-            }
-
-            usersConfigsData[chatId.toString()].configs = Object.assign(usersConfigsData[chatId.toString()].configs, configs)
-            fs.writeFileSync(jsonUsersConfigs, JSON.stringify(usersConfigsData, null, 2))
+            res('Конфиги созданы')
+          } catch (error) {
+            rej(error)
           }
-        }
-        addUserConfigById(chatId, configUuid, name);
-
-      }, 2000)
+        }, 2000)
+      })
+        .then(() => {
+          let command = 'systemctl restart wg-quick@wg0'
+          cp.exec(command, (error, stdout, stderr) => {
+            if (error) {
+              console.log('Error: ', error);
+            }
+          })
+        })
+        .catch(err => console.log(err))
     })
 
     bot.onText(/getconfig (.+)/, async (msg, match) => {
@@ -267,3 +284,21 @@ bot.onText(/support/, msg => {
 
   bot.sendMessage(chatId, 'Для связи с нами напишите о вашей проблеме в @yaxxei')
 })
+
+
+// let a = 2
+// let b = 3
+// new Promise((res, rej) => {
+//   setTimeout(() => {
+//     a += b
+//     console.log(a);
+//     res(a)
+//   }, 2000)
+// })
+//   .then(res => {
+//     a = 6
+//     console.log(a)
+//   })
+//   .catch(err => {
+//     console.log(err);
+//   })
