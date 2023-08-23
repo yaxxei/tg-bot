@@ -296,21 +296,3 @@ bot.onText(/support/, msg => {
 
   bot.sendMessage(chatId, 'Для связи с нами напишите о вашей проблеме в @yaxxei')
 })
-
-
-// let a = 2
-// let b = 3
-// new Promise((res, rej) => {
-//   setTimeout(() => {
-//     a += b
-//     console.log(a);
-//     res(a)
-//   }, 2000)
-// })
-//   .then(res => {
-//     a = 6
-//     console.log(a)
-//   })
-//   .catch(err => {
-//     console.log(err);
-//   })
