@@ -4,7 +4,6 @@ const fs = require('fs')
 const cp = require('child_process')
 const path = require('path');
 const { v4: uuidv4 } = require('uuid')
-const pm2 = require('pm2')
 
 const TelegramBot = require('node-telegram-bot-api')
 const token = process.env.BOT_TOKEN
@@ -69,7 +68,7 @@ const addPeers = async () => {
             const publicKey = fs.readFileSync(filePathPublicKey, 'utf8')
             const preSharedKey = fs.readFileSync(filePathPreSharedKey, 'utf8')
 
-            const address = newAddress
+            const address = incrementAddress();
 
             const linesToAdd = [
               `# Client: ${name} (${configUuid})\n`,
@@ -165,13 +164,14 @@ const addPeers = async () => {
           }
         }, 2000)
       })
-        .then(() => {
-          let command = 'systemctl restart wg-quick@wg0'
-          cp.exec(command, (error, stdout, stderr) => {
-            if (error) {
-              console.log('Error: ', error);
-            }
-          })
+        .then(res => {
+          // let command = 'systemctl restart wg-quick@wg0'
+          // cp.exec(command, (error, stdout, stderr) => {
+          //   if (error) {
+          //     console.log('Error: ', error);
+          //   }
+          // })
+          console.log('Произошел рестарт вайргарда')
         })
         .catch(err => console.log(err))
     })
@@ -205,42 +205,54 @@ const addPeers = async () => {
         }
       }
     });
-
-    const jsonConfig = '../.wg-easy/wg0.json'
-    const jsonData = fs.readFileSync(jsonConfig, 'utf-8');
-    const data = JSON.parse(jsonData);
-    const clients = data.clients
-
-    const addresses = Object.values(clients).map(client => {
-      if (client.hasOwnProperty("address")) {
-        return client.address;
-      }
-    }).filter(Boolean);
-    
-    const sortedAddresses = addresses.sort((a, b) => {
-      const aSplit = a.split('.').map(part => parseInt(part));
-      const bSplit = b.split('.').map(part => parseInt(part));
-      for (let i = 0; i < 4; i++) {
-        if (aSplit[i] !== bSplit[i]) {
-          return aSplit[i] - bSplit[i];
-        }
-      }
-      return 0;
-    });
-    const highestAddress = sortedAddresses[sortedAddresses.length - 1];
-    
-    const addressArr = highestAddress.split('.')
-    const lastElement = addressArr.length - 1
-    const newLastElement = +addressArr[lastElement] + 1
-
-    const newAddressArr = addressArr.slice(0, lastElement).concat(newLastElement)
-    const newAddress = newAddressArr.join('.')
-
   } catch (error) {
     console.log('Ошибка: ', error);
   }
 }
 addPeers()
+
+const incrementAddress = () => {
+  const jsonConfig = '../.wg-easy/wg0.json'
+  const jsonData = fs.readFileSync(jsonConfig, 'utf-8');
+  const data = JSON.parse(jsonData);
+  const clients = data.clients
+
+  const addresses = Object.values(clients).map(client => {
+    if (client.hasOwnProperty("address")) {
+      return client.address;
+    }
+  }).filter(Boolean);
+  
+  const sortedAddresses = addresses.sort((a, b) => {
+    const aSplit = a.split('.').map(part => parseInt(part));
+    const bSplit = b.split('.').map(part => parseInt(part));
+    for (let i = 0; i < 4; i++) {
+      if (aSplit[i] !== bSplit[i]) {
+        return aSplit[i] - bSplit[i];
+      }
+    }
+    return 0;
+  });
+  const highestAddress = sortedAddresses[sortedAddresses.length - 1];
+  
+  const addressArr = highestAddress.split('.')
+  const lastElement = addressArr.length - 1
+
+  if (lastElement < 255) {
+    const newLastElement = +addressArr[lastElement] + 1
+    const newAddressArr = addressArr.slice(0, lastElement).concat(newLastElement)
+    const newAddress = newAddressArr.join('.')
+    return newAddress;
+  } else {
+    const newLastElement = 1;
+    const preLastElement = addressArr.length - 2
+
+    const newPreLastElement = +addressArr[preLastElement] + 1
+    const newAddressArr = addressArr.slice(0, preLastElement).concat(newPreLastElement).concat(newLastElement);
+    const newAddress = newAddressArr.join('.')
+    return newAddress;
+  }
+}
 
 bot.onText(/start/, msg => {
   const chatId = msg.chat.id
